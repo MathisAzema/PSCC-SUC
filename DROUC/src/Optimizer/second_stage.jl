@@ -441,11 +441,23 @@ function second_stage_RO(instance, options, oracle_pb, prod_tot_first_stage, sol
 
     νₖ=JuMP.value.(ν)
     γₖ=JuMP.value.(γ)
+    ζₖ=JuMP.value.(ζ)
     
     d_up=[(b,t) for b in BusWind, t in 1:T if γₖ[b,t]>1e-5 && νₖ[b,t]>1e-5]
     d_down=[(b,t) for b in BusWind, t in 1:T if γₖ[b,t]>1e-5 && νₖ[b,t]<1e-5]
 
-    return objective_value(oracle_pb), d_up, d_down, computation_time
+    # return objective_value(oracle_pb), d_up, d_down, computation_time
+    mumax, mumin = compute_mu_max_min(N2, T, νₖ, thermal_units_2)
+    network_cost_val = value.(oracle_pb[:network_cost])
+    βₖ2=[sum(νₖ[b,t]*instance.Demandbus[b][t] for b in Buses)+sum(force*1.96*uncertainty_0.dev[t]*uncertainty_0.forecast[w][t]*ζₖ[BusWind[w],t] for w in 1:NumWindfarms) + network_cost_val[t] for t in 1:T]
+
+    βₖ= βₖ2
+    obj = [sum(mumin[i, t]*Pmin[i,t] - mumax[i, t]*Pmax[i,t] for i in 1:N2) + βₖ2[t] - sum(νₖ[b,t] * prod_tot_first_stage[b,t] for b in Buses) for t in 1:T]
+    
+    if 100*abs((sum(obj) - objective_value(oracle_pb))/objective_value(oracle_pb)) > 1e-4
+        println(("PROBLEM :", sum(obj), objective_value(oracle_pb), abs(sum(obj) - objective_value(oracle_pb)), obj))
+    end
+    return oracleResults(obj, βₖ, βₖ2, zeros(T), mumax, mumin, νₖ, status, computation_time)
 end
 
 function compute_uncertainty_RO(instance; x0, Γ=1, force=1.0)

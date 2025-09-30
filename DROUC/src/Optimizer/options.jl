@@ -151,3 +151,17 @@ BD_RO_DCA = Options(
     results_second_stage_SP,
     compute_radius_KL
 )
+
+BD_RO_MILP = Options(
+    "BD_RO_MILP",
+    master_RO_problem_benders,
+    oracle_RO_problem,
+    second_stage_RO,
+    add_cut_RO,
+    _add_optimality_cuts_RO,
+    get_variables_RO,
+    get_value_variables_RO,
+    compute_uncertainty_RO,
+    results_second_stage_SP,
+    compute_radius_KL
+)

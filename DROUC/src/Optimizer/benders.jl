@@ -66,11 +66,11 @@ function CCG_RO(instance, options; silent = true, force=1.0, Γ::Int64=0, gap=0.
         value_subproblem, d_up, d_down, computation_time=options.second_stage(instance, options, oracle_pb, prod_tot_first_stage_val, solution_x; Γ=Γ, force=force)
         push!(Time_subproblem, computation_time)
 
-        # println((UB, JuMP.objective_value(master_pb)+value_subproblem-JuMP.value.(master_pb[:thermal_cost])))
+        println((UB, JuMP.objective_value(master_pb)+value_subproblem-JuMP.value.(master_pb[:thermal_cost])))
 
         UB=min(UB, JuMP.objective_value(master_pb)+value_subproblem-JuMP.value.(master_pb[:thermal_cost]))
 
-        # println((k, LB, UB, 100*(UB-LB)/UB))
+        println((k, LB, UB, 100*(UB-LB)/UB))
 
         if value_subproblem>=JuMP.value.(master_pb[:thermal_cost])+0.1 && k <= iter && 100*(UB-LB)/UB>=gap && time() - start<=timelimit-0.1
 

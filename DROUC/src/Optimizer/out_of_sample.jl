@@ -86,7 +86,7 @@ function test_out_of_sample(instance, solution; force=1.0)
 
         if feasibleSolutionFound
             res_obj[k]=JuMP.objective_value(model)
-            res_fake[k]=sum(value.(model[:power_shedding]))
+            res_fake[k]=sum(value.(model[:power_shedding]))+sum(value.(model[:power_curtailement]))
         else
             println((s, "ERROR"))
             return instance.name, 0.0, 0.0, 0.0, 0.0, res_obj, res_fake
