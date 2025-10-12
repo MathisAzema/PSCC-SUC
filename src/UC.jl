@@ -16,7 +16,7 @@ const CURTAILEMENT_COST=1000.0
 
 include("Struct/Instance.jl")
 include("Struct/tools.jl")
-include("Unit/Thermal_unit.jl")
+include("Struct/Thermal_unit.jl")
 include("Struct/parsing.jl")
 include("Optimizer/initialisation_Benders.jl")
 include("Optimizer/second_stage.jl")
