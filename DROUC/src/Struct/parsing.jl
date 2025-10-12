@@ -44,15 +44,15 @@ function parse_IEEE_JEAS(folder, optimizer; N1=35, NumWind=91)
     Demandbus=[maximum_load[b,2]*load_distribution_profile for b in Buses]
     df_lines = CSV.read(joinpath(pwd(), syst, "lines.csv"), DataFrame; header=false)
     Numlines=parse(Int64,df_lines[end,1])
-    Lines=Dict()
+    Lines=Vector{Line}(undef, Numlines)
     Next=[[] for b in Buses]
     for i in 2:Numlines+1
+        id = parse(Int64, df_lines[i,1])
         b1 = parse(Int64, df_lines[i,2])
         b2 = parse(Int64, df_lines[i,3])
         fmax = parse(Float64, df_lines[i,6])
         X = 1/parse(Float64, df_lines[i,5])
-        Lines[b1, b2]=Line(b1,b2, fmax, X)
-        Lines[b2, b1]=Line(b2,b1, fmax, X)
+        Lines[i-1]=Line(id, b1, b2, fmax, X)
         push!(Next[b1], b2)
         push!(Next[b2], b1)
     end

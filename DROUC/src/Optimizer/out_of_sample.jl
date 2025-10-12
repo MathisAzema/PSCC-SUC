@@ -31,19 +31,20 @@ function test_out_of_sample(instance, solution; force=1.0)
 
     @constraint(model,  thermal_cost>=thermal_fuel_cost)
 
-    @variable(model, θ[b in Buses, t in 1:T])
-    @variable(model, flow[b in Buses, bp in Next[b], t in 1:T])
-    
-    Lines=values(instance.Lines)
+    Numlines=length(instance.Lines)
 
-    @constraint(model, [line in Lines, t in 1:T], flow[line.b1,line.b2,t]<=line.Fmax)
-    @constraint(model, [line in Lines, t in 1:T], flow[line.b1,line.b2,t]>=-line.Fmax)
-    @constraint(model, [line in Lines, t in 1:T], flow[line.b1,line.b2,t]==line.B12*(θ[line.b1,t]-θ[line.b2,t]))
+    @variable(model, θ[b in Buses, t in 1:T])
+    @variable(model, flow[l in 1:Numlines, t in 1:T])
+    
+    Lines=instance.Lines
+
+    @constraint(model, [line in Lines, t in 1:T], flow[line.id,t]<=line.Fmax)
+    @constraint(model, [line in Lines, t in 1:T], flow[line.id,t]>=-line.Fmax)
+    @constraint(model, [line in Lines, t in 1:T], flow[line.id,t]==line.B12*(θ[line.b1,t]-θ[line.b2,t]))
 
 
     @variable(model, power[unit in thermal_units_name, t in 0:T]>=0)
     N1=instance.N1
-    thermal_units_1=values(instance.Thermalunits)[1:N1]
     @constraint(model, [i in 1:N1, t in 1:T], power[i, t] == solution.power_ref[i, t+1])
 
     @constraint(model,  [unit in thermal_units; unit.InitialPower!=nothing], power[unit.name, 0]==unit.InitialPower)
@@ -54,7 +55,7 @@ function test_out_of_sample(instance, solution; force=1.0)
 
     @constraint(model, thermal_fuel_cost>= sum(unit.LinearTerm*power[unit.name, t] for unit in thermal_units for t in 1:T) + sum(SHEDDING_COST*power_shedding[b,t]+CURTAILEMENT_COST*power_curtailement[b,t] for b in Buses for t in 1:T))
 
-    @constraint(model,  [t in 1:T, b in Buses], sum(power[unit.name, t] for unit in thermal_units if unit.Bus==b)+power_shedding[b,t]-power_curtailement[b,t]==instance.Demandbus[b][t]+sum(flow[b,bp,t] for bp in Next[b])-force * ξ[b,t])
+    @constraint(model,  [t in 1:T, b in Buses], sum(power[unit.name, t] for unit in thermal_units if unit.Bus==b)+power_shedding[b,t]-power_curtailement[b,t] + sum(flow[line.id,t] for line in Lines if line.b2==b) - sum(flow[line.id,t] for line in Lines if line.b1==b)==instance.Demandbus[b][t]-force * ξ[b,t])
 
     @objective(model, Min, thermal_fixed_cost+thermal_cost)
 
@@ -65,9 +66,9 @@ function test_out_of_sample(instance, solution; force=1.0)
     for s in instance.Test_set
         k+=1
 
-        # if k % 100 == 0
-        #     println("OOS scenario ", k, "/", size_test_set)
-        # end
+        if k % 100 == 0
+            println("OOS scenario ", k, "/", size_test_set)
+        end
 
         ξ_s = [zeros(T) for b in Buses]
         j=0

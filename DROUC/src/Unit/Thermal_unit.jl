@@ -3,7 +3,6 @@ function set_intervals(MinUpTime, InitUpDownTime, InitialPower, MaxPower, MinPow
     Define all the possible intervals [a,b] respecting the initial conditions and the the MinUp constraints
     """
     bmax=25
-    # bmax=24+ceil((MaxPower-MinPower)/DeltaRampDown)+1
     intervals=[[a,b] for a in 1:24 for b in a+MinUpTime:bmax]
     if InitUpDownTime!=nothing
         if InitUpDownTime>=0

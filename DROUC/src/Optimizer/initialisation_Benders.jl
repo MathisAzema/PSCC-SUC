@@ -12,6 +12,13 @@ struct Options
     compute_radius::Function
 end
 
+struct first_stage
+    power_ref::Matrix{Float64}
+    is_on::Matrix{Int}
+    start_up::Matrix{Int}
+    start_down::Matrix{Int}
+end
+
 function initialize_master_problem(instance; silent=true, S::Int64)
     model = Model(instance.optimizer)
     if silent
@@ -70,6 +77,9 @@ function initialize_oracle_problem(instance)
     Next=instance.Next
     Buses=1:size(Next)[1]
 
+    Lines=instance.Lines
+    Numlines=length(Lines)
+
     @variable(model, μₘᵢₙ[i in 1:N2, t in 1:T]>=0)
     @variable(model, μₘₐₓ[i in 1:N2, t in 1:T]>=0)
     @variable(model, ν[b in Buses, t in 1:T])
@@ -79,15 +89,15 @@ function initialize_oracle_problem(instance)
     @constraint(model,  power_shedding[b in Buses, t in 1:T], ν[b, t]<=SHEDDING_COST)
     @constraint(model,  [b in Buses, t in 1:T], ν[b, t]>=-CURTAILEMENT_COST)
 
-    @variable(model, μ1[b1 in Buses, b2 in Next[b1], t in 1:T])
-    @variable(model, μ2[b1 in Buses, b2 in Next[b1], t in 1:T]>=0)
-    @variable(model, μ3[b1 in Buses, b2 in Next[b1], t in 1:T]>=0)
+    @variable(model, μ1[l in 1:Numlines, t in 1:T])
+    @variable(model, μ2[l in 1:Numlines, t in 1:T]>=0)
+    @variable(model, μ3[l in 1:Numlines, t in 1:T]>=0)
 
     Lines=instance.Lines
     @variable(model, network_cost[t in 1:T])
-    @constraint(model, [t in 1:T], network_cost[t]==-sum(Lines[b1,b2].Fmax*(μ2[b1,b2,t]+μ3[b1,b2,t]) for b1 in Buses for b2 in Next[b1]))
-    @constraint(model, [b1 in Buses, b2 in Next[b1], t in 1:T], -ν[b1, t]+μ1[b1,b2,t]-μ2[b1,b2,t]+μ3[b1,b2,t]==0)
-    @constraint(model, [b1 in Buses, t in 1:T], sum(Lines[b1,b2].B12*μ1[b1,b2,t]-Lines[b2,b1].B12*μ1[b2,b1,t] for b2 in Next[b1])==0)
+    @constraint(model, [t in 1:T], network_cost[t]==-sum(line.Fmax*(μ2[line.id,t]+μ3[line.id,t]) for line in Lines))
+    @constraint(model, [line in Lines, t in 1:T], ν[line.b2, t] - ν[line.b1, t] + μ1[line.id,t] - μ2[line.id,t] + μ3[line.id,t]==0)
+    @constraint(model, [b in Buses, t in 1:T], sum(line.B12*μ1[line.id,t] for line in Lines if line.b1==b) - sum(line.B12*μ1[line.id,t] for line in Lines if line.b2==b) == 0)
 
     set_optimizer_attribute(model, "Threads", 1)
     return model
@@ -146,7 +156,6 @@ function master_DRO_l2_problem(instance; silent=true, ρ=0, S::Int64)
     R=500
     λᵣ=[1e-3*10*i/R for i in 1:R]
     @constraint(model,  [r in 1:R], 1/λᵣ[r]-1/λᵣ[r]^2*(λ-λᵣ[r]) <=w)
-    # @constraint(model, λ==1.0)
 
     @constraint(model,  thermal_cost_DRO>=sum(ρ^2*w/1e-2))
 
@@ -165,7 +174,6 @@ function master_DRO_l1_problem(instance; silent=true, ρ=0, S::Int64)
     @variable(model, thermal_cost_DRO>=0)
 
     @variable(model, λ>=0)
-    # @constraint(model, λ==1000)
 
     @constraint(model,  thermal_cost_DRO>=sum(ρ*λ*1e-2))
 

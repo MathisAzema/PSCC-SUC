@@ -96,50 +96,8 @@ KL = Options(
     compute_radius_KL
 )
 
-RO_GRB = Options(
-    "RO_GRB",
-    master_RO_problem_CCG,
-    oracle_RO_problem,
-    second_stage_RO,
-    add_cut_KL,
-    _add_optimality_cuts_KL,
-    get_variables_KL,
-    get_value_variables_KL,
-    compute_uncertainty_RO,
-    results_second_stage_SP,
-    compute_radius_KL
-)
-
 RO_DCA = Options(
     "RO_DCA",
-    master_RO_problem_CCG,
-    oracle_RO_problem,
-    DCAlgo_RO,
-    add_cut_KL,
-    _add_optimality_cuts_KL,
-    get_variables_KL,
-    get_value_variables_KL,
-    compute_uncertainty_RO,
-    results_second_stage_SP,
-    compute_radius_KL
-)
-
-RO_GRB2 = Options(
-    "RO_GRB2",
-    master_RO_problem_CCG,
-    oracle_RO_problem_GRB,
-    second_stage_RO_2,
-    add_cut_KL,
-    _add_optimality_cuts_KL,
-    get_variables_KL,
-    get_value_variables_KL,
-    compute_uncertainty_RO,
-    results_second_stage_SP,
-    compute_radius_KL
-)
-
-BD_RO_DCA = Options(
-    "BD_RO_DCA",
     master_RO_problem_benders,
     oracle_RO_problem,
     DCAlgo_RO,
@@ -152,8 +110,8 @@ BD_RO_DCA = Options(
     compute_radius_KL
 )
 
-BD_RO_MILP = Options(
-    "BD_RO_MILP",
+RO_MILP = Options(
+    "RO_MILP",
     master_RO_problem_benders,
     oracle_RO_problem,
     second_stage_RO,

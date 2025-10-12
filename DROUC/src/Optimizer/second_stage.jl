@@ -440,13 +440,8 @@ function second_stage_RO(instance, options, oracle_pb, prod_tot_first_stage, sol
     status = termination_status(oracle_pb)!=MOI.DUAL_INFEASIBLE
 
     νₖ=JuMP.value.(ν)
-    γₖ=JuMP.value.(γ)
     ζₖ=JuMP.value.(ζ)
     
-    d_up=[(b,t) for b in BusWind, t in 1:T if γₖ[b,t]>1e-5 && νₖ[b,t]>1e-5]
-    d_down=[(b,t) for b in BusWind, t in 1:T if γₖ[b,t]>1e-5 && νₖ[b,t]<1e-5]
-
-    # return objective_value(oracle_pb), d_up, d_down, computation_time
     mumax, mumin = compute_mu_max_min(N2, T, νₖ, thermal_units_2)
     network_cost_val = value.(oracle_pb[:network_cost])
     βₖ2=[sum(νₖ[b,t]*instance.Demandbus[b][t] for b in Buses)+sum(force*1.96*uncertainty_0.dev[t]*uncertainty_0.forecast[w][t]*ζₖ[BusWind[w],t] for w in 1:NumWindfarms) + network_cost_val[t] for t in 1:T]
@@ -492,8 +487,6 @@ function DCAlgo_RO(instance, options, oracle_pb, prod_tot_first_stage, solution_
     N1=instance.N1
     N2 = N - N1
     Next=instance.Next
-    BusWind=instance.BusWind
-    NumWindfarms=length(BusWind)  
     Buses=1:size(Next)[1]
     priceref=zeros(Buses, 1:T)
     
@@ -508,7 +501,6 @@ function DCAlgo_RO(instance, options, oracle_pb, prod_tot_first_stage, solution_
     comp_time=resDCAk.computation_time
 
     while sum(abs.(resDCAk.objective_value-cost))>=1e-3 && k<=10
-        # println((k, sum(cost), sum(resDCAk.objective_value), abs.(resDCAk.objective_value-cost)))
         cost=resDCAk.objective_value
         priceref=resDCAk.ν
         
@@ -519,14 +511,7 @@ function DCAlgo_RO(instance, options, oracle_pb, prod_tot_first_stage, solution_
     end
     resDCAk.computation_time=comp_time
 
-    d_up=[(BusWind[w],t) for w in 1:NumWindfarms, t in 1:T if uncertainty[w][t]<-1e-5]
-    d_down=[(BusWind[w],t) for w in 1:NumWindfarms, t in 1:T if uncertainty[w][t]>1e-5]
-
-    if options == BD_RO_DCA
-        return resDCAk
-    end
-
-    return objective_value(oracle_pb), d_up, d_down, comp_time
+    return resDCAk
 end
 
 function second_stage_DCA_RO(instance, options, oracle_pb, uncertainty, prod_tot_first_stage, Pmin, Pmax;  force=force)
@@ -559,46 +544,4 @@ function second_stage_DCA_RO(instance, options, oracle_pb, uncertainty, prod_tot
     end
 
     return oracleResults(obj, βₖ, βₖ2, zeros(T), mumax, mumin, νₖ, status, computation_time)
-end
-
-function second_stage_RO_2(instance, options, oracle_pb, prod_tot_first_stage, solution_x::Vector{Matrix{Float64}}; Γ=1.0, force=1.0)
-
-    T= instance.TimeHorizon
-    N=instance.N
-    N1=instance.N1
-    N2 = N - N1
-    thermal_units_2=values(instance.Thermalunits)[N1+1:N]
-    Next=instance.Next
-    Buses=1:size(Next)[1] 
-
-    ν=oracle_pb[:ν]
-    δp=oracle_pb[:δp]
-    δm=oracle_pb[:δm]
-    γ=oracle_pb[:γ]
-
-    BusWind=instance.BusWind
-    NumWindfarms=length(BusWind)
-
-    Pmin, Pmax=get_limit_power_solution(instance, solution_x)
-
-    uncertainty_0 = instance.uncertainty
-
-    @objective(oracle_pb, Max, sum(oracle_pb[:μₘᵢₙ][i,t]*Pmin[i,t] - oracle_pb[:μₘₐₓ][i,t]*Pmax[i,t] for i in 1:N2 for t in 1:T)+sum(oracle_pb[:network_cost][t] for t in 1:T)
-    + sum((instance.Demandbus[b][t]-prod_tot_first_stage[b,t])*ν[b,t] for b in Buses, t in 1:T) + sum(force*1.96*uncertainty_0.dev[t]*uncertainty_0.forecast[w][t]*ν[BusWind[w],t]*(δp[BusWind[w],t]-δm[BusWind[w],t]) for w in 1:NumWindfarms, t in 1:T))
-  
-
-    start = time()
-    optimize!(oracle_pb)
-    computation_time = time() - start
-
-    println(computation_time)
-
-
-    δpₖ=JuMP.value.(δp)
-    δmₖ=JuMP.value.(δm)
-
-    d_up=[(b,t) for b in BusWind, t in 1:T if δpₖ[b,t]>1e-5]
-    d_down=[(b,t) for b in BusWind, t in 1:T if δmₖ[b,t]>1e-5]
-
-    return objective_value(oracle_pb), d_up, d_down, computation_time
 end
