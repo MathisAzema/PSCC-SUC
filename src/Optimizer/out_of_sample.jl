@@ -66,9 +66,9 @@ function test_out_of_sample(instance, solution; force=1.0)
     for s in instance.Test_set
         k+=1
 
-        if k % 100 == 0
-            println("OOS scenario ", k, "/", size_test_set)
-        end
+        # if k % 100 == 0
+        #     println("OOS scenario ", k, "/", size_test_set)
+        # end
 
         ξ_s = [zeros(T) for b in Buses]
         j=0
