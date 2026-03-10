@@ -55,4 +55,5 @@ Thumbs.db
 # --- PDF output (optional) ---
 *.pdf
 
-.csv
+*.csv
+*.xlsx
