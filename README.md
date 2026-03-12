@@ -11,6 +11,6 @@ This repository contains the model implementation, data used for experiments.
 	- `Struct/` — data structures and parsers
 - `Data/` — input datasets for test systems
 	- `6bus_JEAS/` and `118_syst_JEAS/` — each contains `generators.csv`, `lines.csv`, `load_distribution_profile.csv`, `maximum_load.csv`
-- `resultsPSCC/` — notebooks and results from experiments
+- `results_article/` — notebooks and results from experiments
 - `main.ipynb` — notebook to run the code
 - `Project.toml`, `Manifest.toml` — Julia project environment and dependencies

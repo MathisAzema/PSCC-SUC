@@ -1,5 +1,9 @@
-function return_solution(master_pb, computation_time, instance, S, batch, Time_subproblem, gap, force)
+function return_solution(master_pb, computation_time, instance, S, batch, Time_subproblem, gap, force, radius, Γ)
     feasibleSolutionFound = primal_status(master_pb) == MOI.FEASIBLE_POINT
+
+    N1 = instance.N1
+    thermal_units_1=values(instance.Thermalunits)[1:N1]
+    T = instance.TimeHorizon
 
     if feasibleSolutionFound
 
@@ -8,15 +12,21 @@ function return_solution(master_pb, computation_time, instance, S, batch, Time_s
         solution_start_down = round.(convert(Matrix{Float64}, value.(master_pb[:start_down])))
         solution_power_ref=JuMP.value.(master_pb[:power_first_stage])
 
+        for unit in thermal_units_1
+            for t in 1:T
+                solution_power_ref[unit.name, t] = min(max(solution_power_ref[unit.name, t], unit.MinPower*solution_is_on[unit.name, t+1]), unit.MaxPower*solution_is_on[unit.name, t+1])
+            end
+        end
+
         first_stage_solution = first_stage(solution_power_ref, solution_is_on, solution_start_up, solution_start_down)
 
-        return instance.name, computation_time, objective_value(master_pb), objective_bound(master_pb), first_stage_solution, S,batch, Time_subproblem, gap, force, value.(master_pb[:prod_tot_first_stage])
+        return instance.name, computation_time, objective_value(master_pb), objective_bound(master_pb), first_stage_solution, S,batch, Time_subproblem, gap, force, radius, Γ, value.(master_pb[:prod_tot_first_stage])
     else
         return Time_subproblem
     end
 end
 
-function benders_RO(instance, options; silent = true, force=1.0, Γ::Int64=0, gap=0.05, timelimit=10)
+function benders_RO(instance, options; silent = true, force=1.0, Γ::Float64=0.0, gap=0.05, timelimit=10)
 
     master_pb=options.master_problem(instance, silent=silent)
     oracle_pb=options.oracle_problem(instance, Γ=Γ)
@@ -57,7 +67,7 @@ function benders_RO(instance, options; silent = true, force=1.0, Γ::Int64=0, ga
         return
     end
 
-    set_optimizer_attribute(master_pb, "TimeLimit", timelimit-(time() - start))
+    set_optimizer_time_limit(master_pb,  timelimit-(time() - start))
     set_optimizer_attribute(master_pb, "LazyConstraints", 1)
     MOI.set(master_pb, Gurobi.CallbackFunction(), my_callback_function)
     start = time()
@@ -75,14 +85,18 @@ function benders_RO(instance, options; silent = true, force=1.0, Γ::Int64=0, ga
 
     first_stage_solution = first_stage(solution_power_ref, solution_is_on, solution_start_up, solution_start_down)
 
-    return instance.name, computation_time, objective_value(master_pb), objective_bound(master_pb), first_stage_solution, Time_subproblem
+    return return_solution(master_pb, computation_time, instance, 0, 0, Time_subproblem, gap, force, 0.0, Γ)
 end
 
-function benders(instance, options; ρ=0, silent=true, force=1, S::Int64, batch=1, gap=0.05, timelimit=10)
+function benders(instance, options; ρ=0, Γ::Float64=-1.0, silent=true, force=1, S::Int64=-1, batch=1, gap=0.05, timelimit=10)
 
     radius = options.compute_radius(S, ρ)
     master_pb=options.master_problem(instance, silent=silent, ρ=radius, S=S)
-    oracle_pb=options.oracle_problem(instance)
+    if Γ>=0
+        oracle_pb=options.oracle_problem(instance, Γ=Γ)
+    else
+        oracle_pb=options.oracle_problem(instance)
+    end
 
     infty=1e9
     LB=1
@@ -133,7 +147,11 @@ function benders(instance, options; ρ=0, silent=true, force=1, S::Int64, batch=
 
             solution_x = [solution_is_on, solution_start_up, solution_start_down]
 
-            second_stage_cost_ub, thermal_cost_scenario = options.add_cut(cb_data, options, master_pb, oracle_pb, instance, Time_subproblem, solution_x; force=force, S=S, batch=batch, gap=gap, ρ=ρ)
+            if Γ>=0
+                second_stage_cost_ub, thermal_cost_scenario = options.add_cut(cb_data, options, master_pb, oracle_pb, instance, Time_subproblem, solution_x; force=force, S=S, batch=batch, gap=gap, ρ=ρ, Γ=Γ)
+            else
+                second_stage_cost_ub, thermal_cost_scenario = options.add_cut(cb_data, options, master_pb, oracle_pb, instance, Time_subproblem, solution_x; force=force, S=S, batch=batch, gap=gap, ρ=ρ)
+            end
             if second_stage_cost_ub<= 0.999999*UB
                 UB=second_stage_cost_ub
                 if k>=10
@@ -147,7 +165,7 @@ function benders(instance, options; ρ=0, silent=true, force=1, S::Int64, batch=
         return
     end
 
-    set_optimizer_attribute(master_pb, "TimeLimit", timelimit-(time() - start))
+    set_optimizer_time_limit(master_pb,  timelimit-(time() - start))
     set_optimizer_attribute(master_pb, "LazyConstraints", 1)
     MOI.set(master_pb, Gurobi.CallbackFunction(), my_callback_function)
     start = time()
@@ -157,5 +175,5 @@ function benders(instance, options; ρ=0, silent=true, force=1, S::Int64, batch=
     optimize!(master_pb)
     computation_time = time() - start
 
-    return return_solution(master_pb, computation_time, instance, S, batch, Time_subproblem, gap, force)
+    return return_solution(master_pb, computation_time, instance, S, batch, Time_subproblem, gap, force, ρ, Γ)
 end

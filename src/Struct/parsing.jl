@@ -1,4 +1,4 @@
-function parse_IEEE_JEAS(folder, optimizer; N1=35, NumWind=91)
+function parse_IEEE_JEAS(folder; N1=35, NumWind=91)
     """
     Parse the IEEE 118-bus instnace
     """
@@ -83,5 +83,5 @@ function parse_IEEE_JEAS(folder, optimizer; N1=35, NumWind=91)
     Test_set=Num_batch*Smax+1:Nb_total_scenario
     push!(Training_set, [day for day in Test_set])
 
-    return Instance(name_instance, TimeHorizon, N, N1, uncertainty, Thermal_units, Lines, Next, Demandbus, BusWind, Training_set, Test_set, optimizer)
+    return Instance(name_instance, TimeHorizon, N, N1, uncertainty, Thermal_units, Lines, Next, Demandbus, BusWind, Training_set, Test_set)
 end

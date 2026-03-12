@@ -1,3 +1,29 @@
+function initializeJuMPModel()
+    if SOLVER == "Mosek"
+        return Model(optimizer_with_attributes(
+            Mosek.Optimizer,
+            "MSK_IPAR_NUM_THREADS" => 1
+        ))
+    end
+    if SOLVER == "Gurobi"
+        m = Model(optimizer_with_attributes(
+            () -> Gurobi.Optimizer(GUROBI_ENV),
+            "OutputFlag" => 0,
+            "Threads" => 1,
+        ))
+        return m
+    end
+end
+
+function set_optimizer_time_limit(m::JuMP.Model, time_limit::Float64)
+    if SOLVER == "Mosek"
+        JuMP.set_optimizer_attribute(m, "MSK_DPAR_OPTIMIZER_MAX_TIME", 1.0*max(time_limit, 0.01))
+    end
+    if SOLVER == "Gurobi"
+        JuMP.set_optimizer_attribute(m, "TimeLimit", max(time_limit, 0.01))
+    end
+end
+
 function read_data_forecast(file)
     return CSV.read(file, DataFrame; delim=",", header=0)
 end
@@ -137,6 +163,48 @@ function get_value_variables_DRO_l2(instance, master_pb, S, cb_data, solution_is
         vals= vcat([solution_is_on[i,t+1] for i in 1:N for t in 0:T], [solution_start_up[i,t] for i in 1:N for t in 1:T], [solution_start_down[i,t] for i in 1:N for t in 1:T],
             [callback_value.(cb_data, master_pb[:thermal_fixed_cost]), callback_value.(cb_data, master_pb[:thermal_cost_DRO]), sum(thermal_cost_scenario[s][t] for s in 1:S for t in 1:T)/S], [thermal_cost_scenario[s][t] for s in 1:S for t in 1:T],
             [callback_value(cb_data, master_pb[:λ]), callback_value(cb_data, master_pb[:w])])
+        return vals
+    end
+end
+
+function get_variables_DRO_l2_budget(instance, master_pb, S)
+    T= instance.TimeHorizon
+    N=instance.N
+    N1=instance.N1
+    Next=instance.Next
+    Buses=1:size(Next)[1]
+    if N1 >= 1
+        vars= vcat([master_pb[:is_on][i,t] for i in 1:N for t in 0:T], [master_pb[:start_up][i,t] for i in 1:N for t in 1:T], [master_pb[:start_down][i,t] for i in 1:N for t in 1:T],
+            [master_pb[:thermal_fixed_cost], master_pb[:thermal_cost_DRO], master_pb[:thermal_cost]], [master_pb[:thermal_fuel_cost][s,t] for s in 1:S for t in 1:T], 
+            [master_pb[:power_first_stage][i,t] for i in 1:N1 for t in 1:T], [master_pb[:dispatch_first_stage]], [master_pb[:prod_tot_first_stage][b,t] for b in Buses for t in 1:T],
+            [master_pb[:λ]])
+        
+        return vars
+    else
+        vars= vcat([master_pb[:is_on][i,t] for i in 1:N for t in 0:T], [master_pb[:start_up][i,t] for i in 1:N for t in 1:T], [master_pb[:start_down][i,t] for i in 1:N for t in 1:T],
+            [master_pb[:thermal_fixed_cost], master_pb[:thermal_cost_DRO], master_pb[:thermal_cost]], [master_pb[:thermal_fuel_cost][s,t] for s in 1:S for t in 1:T], 
+            [master_pb[:λ]])
+        
+        return vars
+    end
+end
+
+function get_value_variables_DRO_l2_budget(instance, master_pb, S, cb_data, solution_is_on, solution_start_up, solution_start_down, thermal_cost_scenario)
+    T= instance.TimeHorizon
+    N=instance.N
+    N1=instance.N1
+    Next=instance.Next
+    Buses=1:size(Next)[1]
+    if N1 >= 1
+        vals= vcat([solution_is_on[i,t+1] for i in 1:N for t in 0:T], [solution_start_up[i,t] for i in 1:N for t in 1:T], [solution_start_down[i,t] for i in 1:N for t in 1:T],
+            [callback_value.(cb_data, master_pb[:thermal_fixed_cost]), callback_value.(cb_data, master_pb[:thermal_cost_DRO]), sum(thermal_cost_scenario[s][t] for s in 1:S for t in 1:T)/S], [thermal_cost_scenario[s][t] for s in 1:S for t in 1:T],
+            [callback_value.(cb_data, master_pb[:power_first_stage][i,t]) for i in 1:N1 for t in 1:T], callback_value.(cb_data, master_pb[:dispatch_first_stage]), [callback_value.(cb_data, master_pb[:prod_tot_first_stage][b,t]) for b in Buses for t in 1:T],
+            [callback_value(cb_data, master_pb[:λ])])
+            return vals
+    else
+        vals= vcat([solution_is_on[i,t+1] for i in 1:N for t in 0:T], [solution_start_up[i,t] for i in 1:N for t in 1:T], [solution_start_down[i,t] for i in 1:N for t in 1:T],
+            [callback_value.(cb_data, master_pb[:thermal_fixed_cost]), callback_value.(cb_data, master_pb[:thermal_cost_DRO]), sum(thermal_cost_scenario[s][t] for s in 1:S for t in 1:T)/S], [thermal_cost_scenario[s][t] for s in 1:S for t in 1:T],
+            [callback_value(cb_data, master_pb[:λ])])
         return vals
     end
 end
@@ -336,22 +404,73 @@ function get_value_variables_RO(instance, master_pb, cb_data, solution_is_on, so
     end
 end
 
-function compute_radius_l2(S, ρ)
-    f = S^0.25
-    radius = ρ/f
-    return radius
+function get_variables_moment(instance, master_pb)
+    T= instance.TimeHorizon
+    N=instance.N
+    N1=instance.N1
+    Next=instance.Next
+    Buses=1:size(Next)[1]
+    BusWind = instance.BusWind
+
+    if N1>=1
+        vars= vcat([master_pb[:is_on][i,t] for i in 1:N for t in 0:T], [master_pb[:start_up][i,t] for i in 1:N for t in 1:T], [master_pb[:start_down][i,t] for i in 1:N for t in 1:T],
+            [master_pb[:thermal_fixed_cost], master_pb[:thermal_cost]], [master_pb[:thermal_fuel_cost][t] for t in 1:T], 
+            [master_pb[:power_first_stage][i,t] for i in 1:N1 for t in 1:T], [master_pb[:dispatch_first_stage]], [master_pb[:prod_tot_first_stage][b,t] for b in Buses for t in 1:T],
+            [master_pb[:β][b,t] for b in BusWind for t in 1:T], [master_pb[:σ][b,t] for b in BusWind for t in 1:T]
+            )
+
+        return vars
+    else
+        vars= vcat([master_pb[:is_on][i,t] for i in 1:N for t in 0:T], [master_pb[:start_up][i,t] for i in 1:N for t in 1:T], [master_pb[:start_down][i,t] for i in 1:N for t in 1:T], 
+            [master_pb[:thermal_fixed_cost], master_pb[:thermal_cost]], [master_pb[:thermal_fuel_cost][t] for t in 1:T], 
+            [master_pb[:dispatch_first_stage]], [master_pb[:prod_tot_first_stage][b,t] for b in Buses for t in 1:T],
+            [master_pb[:β][b,t] for b in BusWind for t in 1:T], [master_pb[:σ][b,t] for b in BusWind for t in 1:T]
+            )
+
+        return vars
+    end
 end
 
-function compute_radius_l1(S, ρ)
+function get_value_variables_moment(instance, master_pb, cb_data, solution_is_on, solution_start_up, solution_start_down, thermal_cost_scenario)
+    T= instance.TimeHorizon
+    N=instance.N
+    N1=instance.N1
+    Next=instance.Next
+    Buses=1:size(Next)[1]
+    BusWind = instance.BusWind
+    if N1>=1
+        vals= vcat([solution_is_on[i,t+1] for i in 1:N for t in 0:T], [solution_start_up[i,t] for i in 1:N for t in 1:T], [solution_start_down[i,t] for i in 1:N for t in 1:T],
+            [callback_value.(cb_data, master_pb[:thermal_fixed_cost]), sum(thermal_cost_scenario[t] for t in 1:T)], [thermal_cost_scenario[t] for t in 1:T],
+            [callback_value.(cb_data, master_pb[:power_first_stage][i,t]) for i in 1:N1 for t in 1:T], callback_value.(cb_data, master_pb[:dispatch_first_stage]), [callback_value.(cb_data, master_pb[:prod_tot_first_stage][b,t]) for b in Buses for t in 1:T],
+            [callback_value.(cb_data, master_pb[:β][b,t]) for b in BusWind for t in 1:T], 
+            [callback_value.(cb_data, master_pb[:σ][b,t]) for b in BusWind for t in 1:T]
+            )
+        
+        return vals
+    else
+        vals= vcat([solution_is_on[i,t+1] for i in 1:N for t in 0:T], [solution_start_up[i,t] for i in 1:N for t in 1:T], [solution_start_down[i,t] for i in 1:N for t in 1:T],
+            [callback_value.(cb_data, master_pb[:thermal_fixed_cost]), sum(thermal_cost_scenario[t] for t in 1:T)], [thermal_cost_scenario[t] for t in 1:T],
+            callback_value.(cb_data, master_pb[:dispatch_first_stage]), [callback_value.(cb_data, master_pb[:prod_tot_first_stage][b,t]) for b in Buses for t in 1:T],
+            [callback_value.(cb_data, master_pb[:β][b,t]) for b in BusWind for t in 1:T], 
+            [callback_value.(cb_data, master_pb[:σ][b,t]) for b in BusWind for t in 1:T]
+            )
+        return vals
+    end
+end
+
+function compute_radius_DRO(S, ρ)
     f = S^0.5
     radius = ρ/f
     return radius
 end
 
 function compute_radius_KL(S, ρ)
-    df = S - 1
-    dist = Chisq(df)
-    return quantile(dist, ρ)/(2*S)
+    dist = Chisq(1)
+    return quantile(dist, 1-2*ρ)/(2*S)
+end
+
+function compute_radius_RO(S, ρ)
+    return 0.0
 end
 
 function compute_radius_AVAR(S, ρ)

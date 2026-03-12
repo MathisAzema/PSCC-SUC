@@ -47,5 +47,5 @@ struct Instance
     BusWind::Vector{Int64}
     Training_set::Vector{Vector{Int64}}
     Test_set::UnitRange{Int64}
-    optimizer::Any
+    # optimizer::Any
 end

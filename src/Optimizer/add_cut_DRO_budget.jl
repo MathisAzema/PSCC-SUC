@@ -1,4 +1,4 @@
-function add_cut_DRO(cb_data, options::Options, master_pb::JuMP.Model, oracle_pb, instance::Instance, Time_subproblem, solution_x::Vector{Matrix{Float64}}; force::Float64, S::Int64, batch=1, gap, ρ=0.0)
+function add_cut_DRO_budget(cb_data, options::Options, master_pb::JuMP.Model, oracle_pb, instance::Instance, Time_subproblem, solution_x::Vector{Matrix{Float64}}; force::Float64, S::Int64, batch=1, gap, ρ=0.0, Γ = 0.0)
     """
     Add Benders' cut
     """
@@ -7,6 +7,8 @@ function add_cut_DRO(cb_data, options::Options, master_pb::JuMP.Model, oracle_pb
     N=instance.N
     N1=instance.N1
     N2 = N - N1
+    BusWind=instance.BusWind
+    NumWindfarms=length(BusWind)
 
     thermal_cost=master_pb[:thermal_cost]
     thermal_fixed_cost=master_pb[:thermal_fixed_cost]
@@ -17,7 +19,6 @@ function add_cut_DRO(cb_data, options::Options, master_pb::JuMP.Model, oracle_pb
     thermal_fixed_cost_val=callback_value(cb_data, thermal_fixed_cost)
     dispatch_first_stage_val=callback_value(cb_data, dispatch_first_stage)
     prod_tot_first_stage_val=callback_value.(cb_data, prod_tot_first_stage)
-    objval = callback_value(cb_data, master_pb[:obj])
 
     thermal_cost_DRO=master_pb[:thermal_cost_DRO]
     thermal_cost_DRO_val = callback_value(cb_data, thermal_cost_DRO)
@@ -31,7 +32,18 @@ function add_cut_DRO(cb_data, options::Options, master_pb::JuMP.Model, oracle_pb
 
     @objective(oracle_pb, Max, sum(oracle_pb[:μₘᵢₙ][i,t]*Pmin[i,t] - oracle_pb[:μₘₐₓ][i,t]*Pmax[i,t] for i in 1:N2 for t in 1:T)+sum(oracle_pb[:network_cost][t] for t in 1:T))
 
-    cut_parameters=[options.second_stage(instance, options, oracle_pb, prod_tot_first_stage_val, Pmin, Pmax; λ=1e-2*λ_val, batch=batch, scenario=s, force=force) for s in 1:S]
+    gradient_model = initializeJuMPModel()
+    set_silent(gradient_model)
+
+    @variable(gradient_model, ξ[w in 1:NumWindfarms, t in 1:T])
+    @variable(gradient_model, ξ⁺[w in 1:NumWindfarms, t in 1:T]>=0)
+    @variable(gradient_model, ξ⁻[w in 1:NumWindfarms, t in 1:T]>=0)
+    @constraint(gradient_model, [w in 1:NumWindfarms, t in 1:T], ξ⁺[w, t]<= 1)
+    @constraint(gradient_model, [w in 1:NumWindfarms, t in 1:T], ξ⁻[w, t]<= 1)
+    @constraint(gradient_model, [w in 1:NumWindfarms, t in 1:T], ξ[w, t] == 1.96*ξ⁺[w,t] - 1.96*ξ⁻[w,t])
+    @constraint(gradient_model, [t in 1:T], sum(ξ⁺[w, t]+ξ⁻[w,t] for w in 1:NumWindfarms) <= Γ)
+
+    cut_parameters=[options.second_stage(instance, gradient_model, options, oracle_pb, prod_tot_first_stage_val, Pmin, Pmax; λ=1e-2*λ_val, batch=batch, scenario=s, force=force) for s in 1:S]
 
     for s in 1:S
         Time_iter[s]=cut_parameters[s].computation_time
@@ -45,7 +57,7 @@ function add_cut_DRO(cb_data, options::Options, master_pb::JuMP.Model, oracle_pb
     return thermal_fixed_cost_val+dispatch_first_stage_val+thermal_cost_DRO_val+sum(cut_parameters[s].objective_value[t] for t in 1:T for s in 1:S)/S, [cut_parameters[s].objective_value for s in 1:S]
 end
 
-function _add_optimality_cuts_DRO(cb_data, master_pb, instance::Instance, cut_parameters::Vector{oracleResults}; S::Int64)
+function _add_optimality_cuts_DRO_budget(cb_data, master_pb, instance::Instance, cut_parameters::Vector{oracleResults}; S::Int64)
     T= instance.TimeHorizon
     thermal_fuel_cost=master_pb[:thermal_fuel_cost]
     prod_tot_first_stage=master_pb[:prod_tot_first_stage]
