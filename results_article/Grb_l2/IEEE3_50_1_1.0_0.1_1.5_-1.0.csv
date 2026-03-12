@@ -1,0 +1,11 @@
+metric,value
+name,IEEE3
+S,50
+batch,1
+force,1.0
+Time,67.43649291992188
+LB,0.0
+UB,96401.05650215613
+radius,1.5
+Γ,-1.0
+OOS,96588.18295274426
